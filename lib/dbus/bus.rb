@@ -17,35 +17,18 @@ require "singleton"
 #
 # Module containing all the D-Bus modules and classes.
 module DBus
-  # This represents a remote service. It should not be instantiated directly
-  # Use {Connection#service}
-  class Service
-    # The service name.
-    attr_reader :name
-    # The bus the service is running on.
-    attr_reader :bus
-    # The service root (FIXME).
+  # A hack: not a service, in that there is no "destination" message field
+  # but library code expects a Service class.
+  class ProxyPeerService
+    # @return [Connection]
+    attr_reader :connection
+
+    # @return [Node] having Object or ProxyObject
     attr_reader :root
 
-    # Create a new service with a given _name_ on a given _bus_.
-    def initialize(name, bus)
-      @name = BusName.new(name)
-      @bus = bus
+    def initialize(connection)
+      @connection = connection
       @root = Node.new("/")
-    end
-
-    # Determine whether the service name already exists.
-    def exists?
-      bus.proxy.ListNames[0].member?(@name)
-    end
-
-    # Perform an introspection on all the objects on the service
-    # (starting recursively from the root).
-    def introspect
-      raise NotImplementedError if block_given?
-
-      rec_introspect(@root, "/")
-      self
     end
 
     # Retrieves an object at the given _path_.
@@ -64,11 +47,64 @@ module DBus
       node = get_node(path, create: true)
       if node.object.nil? || node.object.api != api
         node.object = ProxyObject.new(
-          @bus, @name, path,
+          @connection, @name, path,
           api: api
         )
       end
       node.object
+    end
+
+    # Get the object node corresponding to the given *path*.
+    # @param path [ObjectPath]
+    # @param create [Boolean] if true, the the {Node}s in the path are created
+    #   if they do not already exist.
+    # @return [Node,nil]
+    def get_node(path, create: false)
+      n = @root
+      path.sub(%r{^/}, "").split("/").each do |elem|
+        if !(n[elem])
+          return nil if !create
+
+          n[elem] = Node.new(elem)
+        end
+        n = n[elem]
+      end
+      if n.nil?
+        DBus.logger.debug "Warning, unknown object #{path}"
+      end
+      n
+    end
+  end
+
+  # This represents a remote service. It should not be instantiated directly
+  # Use {Connection#service}
+  # FIXME: this class mixes client and server concepts
+  class Service < ProxyPeerService
+    # The service name.
+    attr_reader :name
+    
+    # Create a new service with a given _name_ on a given _bus_.
+    def initialize(name, bus)
+      @name = BusName.new(name)
+      super(bus)
+    end
+
+    def bus
+      connection
+    end
+
+    # Determine whether the service name already exists.
+    def exists?
+      bus.proxy.ListNames[0].member?(@name)
+    end
+
+    # Perform an introspection on all the objects on the service
+    # (starting recursively from the root).
+    def introspect
+      raise NotImplementedError if block_given?
+
+      rec_introspect(@root, "/")
+      self
     end
 
     # Export an object
@@ -95,27 +131,6 @@ module DBus
 
       obj.service = nil
       parent_node.delete(node_name).object
-    end
-
-    # Get the object node corresponding to the given *path*.
-    # @param path [ObjectPath]
-    # @param create [Boolean] if true, the the {Node}s in the path are created
-    #   if they do not already exist.
-    # @return [Node,nil]
-    def get_node(path, create: false)
-      n = @root
-      path.sub(%r{^/}, "").split("/").each do |elem|
-        if !(n[elem])
-          return nil if !create
-
-          n[elem] = Node.new(elem)
-        end
-        n = n[elem]
-      end
-      if n.nil?
-        DBus.logger.debug "Warning, unknown object #{path}"
-      end
-      n
     end
 
     #########
