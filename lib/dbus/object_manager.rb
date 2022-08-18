@@ -16,7 +16,9 @@ module DBus
 
     def managed_objects
       # FIXME: find exported_questions which is CHILDREN objects, not self
-      exported_questions.each_with_object({}) do |obj, hash|
+      # FIXME: also fix the "service" concept
+      descendant_objects = @service.descendants_for(path)
+      descendant_objects.each_with_object({}) do |obj, hash|
         hash[obj.path] = obj.interfaces_and_properties
       end
     end

@@ -125,6 +125,14 @@ module DBus
       end
       om_node&.object
     end
+
+    def descendants_for(path)
+      node = get_node(path, create: false)
+      raise ArgumentError, "Object path #{path} doesn't exist" if node.nil?
+
+      descendant_objects(node)
+    end
+
     #########
 
     private
@@ -216,6 +224,14 @@ module DBus
                              .map { |k| "#{k} => #{self[k].sub_inspect}" }
                              .join(",")
       "#{s}{#{contents_sub_inspect}}"
+    end
+
+    # @return [Array<DBus::Object>]
+    def descendant_objects
+      children_objects = values.map(&:object).compact
+      descendants = values.map(&:descendant_objects)
+      flat_descendants = descendants.reduce([], &:+)
+      children_objects + flat_descendants
     end
   end
 
