@@ -130,7 +130,7 @@ module DBus
       node = get_node(path, create: false)
       raise ArgumentError, "Object path #{path} doesn't exist" if node.nil?
 
-      descendant_objects(node)
+      node.descendant_objects
     end
 
     #########
